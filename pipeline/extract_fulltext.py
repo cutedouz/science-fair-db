@@ -8,7 +8,7 @@
 
 用法：python3 pipeline/extract_fulltext.py [--limit N]
 """
-import csv, json, os, re, sys, collections
+import csv, json, math, os, re, sys, collections
 from multiprocessing import Pool
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -18,6 +18,69 @@ OUT_SITE = os.path.join(ROOT, 'site', 'data', 'fulltext')
 MAX_CHARS = 12000
 # 第 55 屆部分 PDF 字型編碼錯誤時常見的錯字；出現 5 次以上就套用 font_fix.json 對照表
 GARBLED = re.compile('[ˣǵ烉炻ˤᶳᶲㆹ冯⃱屛]')
+# 另一種錯法：中文被換成阿拉伯、印度等文字的字母（例：ࣽ৖໒ۈаٰǴ）
+WEIRD = re.compile('[\u0400-\u04ff\u0590-\u1cff\u01c0-\u024f]')
+
+
+_cf = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'char_freq.json')
+CHAR_FREQ = json.load(open(_cf, encoding='utf-8')) if os.path.exists(_cf) else {}
+COMMON = set(CHAR_FREQ)
+_FREQ_TOTAL = sum(CHAR_FREQ.values()) or 1
+_RARE = math.log(0.5 / _FREQ_TOTAL)
+LOGF = {ch: math.log(n / _FREQ_TOTAL) for ch, n in CHAR_FREQ.items()}
+
+
+def big5_glyph(code, off):
+    """部分 PDF（多在第 52 屆）抽出的是字型裡的字形序號，依 Big5 順序排列。
+    中文區：Big5 序號 = 字碼 − off；符號區再多位移 63（字型跳過 Big5 未使用的 A3C0–A3FE）。
+    例：off=436 時「中」（Big5 A4A4，序號 537）抽成 U+03CD。"""
+    g = code - off - 63
+    if g < 0:
+        a = code - off + 193            # 有些字型連英數字也是字形序號（例：「300」抽成 ˆ˃˃）
+        return chr(a) if 32 <= a < 127 else None
+    idx = g if g < 408 else code - off
+    row, col = divmod(idx, 157)
+    if row > 0x58:
+        return None
+    lead, trail = 0xA1 + row, (0x40 + col if col < 63 else 0xA1 + col - 63)
+    try:
+        return bytes([lead, trail]).decode('cp950')
+    except UnicodeDecodeError:
+        return None
+
+
+def decode_glyphs(page):
+    """一頁文字若大多是字形序號，找出能還原最多常用中文字的位移後換回中文；否則原樣傳回"""
+    body = [ch for ch in page if ord(ch) > 0x7f and not ch.isspace()]
+    if len(body) < 20 or sum(0x100 <= ord(ch) < 0x2000 for ch in body) / len(body) < 0.2 or not COMMON:
+        return page, False
+    freq = collections.Counter(body).most_common(40)          # 最常出現的字（多半是「的」「，」）最能判斷位移
+    total = sum(n for _, n in freq)
+    # 以「還原後的字在一般摘要中的出現頻率」評分：真正的位移會還原出「的」「，」這類極常見的字
+    score = lambda off: sum(n * LOGF.get(big5_glyph(ord(ch), off) or '', _RARE) for ch, n in freq)
+    best_off = max(range(0, 3000), key=score)
+    hit = sum(n for ch, n in freq if (big5_glyph(ord(ch), best_off) or '') in COMMON)
+    if hit / total < 0.6:
+        return page, False
+    return ''.join((big5_glyph(ord(ch), best_off) or ch) if ord(ch) > 0x7f else ch for ch in page), True
+
+
+def fix_pages(pages):
+    """字形序號逐頁判斷（同一份 PDF 可能混用字型）；第一種錯字則看整份 PDF 未還原的頁面一起判斷"""
+    out, plain = [], []
+    for p in pages:
+        p, done = decode_glyphs(p)
+        out.append(p)
+        if not done:
+            plain.append(len(out) - 1)
+    if is_garbled('\n'.join(out[i] for i in plain)):
+        for i in plain:
+            out[i] = out[i].translate(FONT_FIX)
+    return '\n'.join(out)
+
+
+def is_garbled(text):
+    return len(GARBLED.findall(text)) >= 5 or len(WEIRD.findall(text)) >= 30
 _ff = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'font_fix.json')
 FONT_FIX = str.maketrans(json.load(open(_ff, encoding='utf-8'))) if os.path.exists(_ff) else {}
 
@@ -43,10 +106,10 @@ def extract_text(path):
             raise ImportError
         import pymupdf
         with pymupdf.open(path) as doc:
-            return '\n'.join(page.get_text() for page in doc)
+            return fix_pages([page.get_text() for page in doc])
     except ImportError:
         import pypdf
-        return '\n'.join((p.extract_text() or '') for p in pypdf.PdfReader(path).pages)
+        return fix_pages([p.extract_text() or '' for p in pypdf.PdfReader(path).pages])
 
 
 def classify(title):
@@ -132,8 +195,6 @@ def work(job):
         text = extract_text(path)
     except Exception as err:
         return sid, None, f'讀取失敗：{err}'
-    if len(GARBLED.findall(text)) >= 5:
-        text = text.translate(FONT_FIX)
     if len(re.findall(r'[一-鿿]', text)) < 300:
         return sid, None, '幾乎沒有文字（可能是掃描檔）'
     secs = split_sections(text)
@@ -162,6 +223,9 @@ def find_jobs():
     works = json.load(open(os.path.join(ROOT, 'data', 'works.json'), encoding='utf-8'))
     by_code = {(w['edition_no'], w['code']): w for w in works if w['code']}
     by_title = {(w['edition_no'], nt(w['title'])): w for w in works if w['src'] == '全國' and w['type'] == '作品'}
+    ov = json.load(open(os.path.join(ROOT, 'pipeline', 'pdf_overrides.json'), encoding='utf-8'))
+    overrides = {nfc(k): v for k, v in ov.items() if not k.startswith('_')}
+    by_id = {w['id']: w for w in works}
     jobs = {}
     for d, _, fs in os.walk(SRC):
         for f in fs:
@@ -169,7 +233,7 @@ def find_jobs():
             if not m or f.startswith('._'):
                 continue
             ed = int(m.group(1))
-            w = by_code.get((ed, m.group(2))) or by_title.get((ed, nt(m.group(3))))
+            w = by_id.get(overrides.get(nfc(f))) or by_code.get((ed, m.group(2))) or by_title.get((ed, nt(m.group(3))))
             if w:
                 jobs[w['id']] = (w['id'], os.path.join(d, f), ed)
     return sorted(jobs.values())

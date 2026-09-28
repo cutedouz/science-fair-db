@@ -35,7 +35,7 @@ for f in os.listdir(OUT_FULL):
                 t = t.replace(n, '〔作者〕'); hit_name = True
         t, k = KEYLIKE.subn('〔已移除疑似金鑰〕', t)
         keys += k
-        out.append({'h': s['h'], 't': t})
+        out.append({'h': s['h'].rstrip('!！ '), 't': t})
     named += hit_name
     json.dump(out, open(os.path.join(OUT_SITE, f), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     built += 1

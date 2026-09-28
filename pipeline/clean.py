@@ -114,9 +114,12 @@ def city_of(school):
 
 GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高級中等學校組': '高中職'}
 CODE_STAGE = {'03': '國中', '04': '高中', '05': '高中職', '08': '國小', '09': '高職'}
+pc_path = os.path.join(RAW, 'pdf_codes.json')
+pdf_codes = {int(k): v['code'] for k, v in json.load(open(pc_path, encoding='utf-8')).items()} if os.path.exists(pc_path) else {}
 def code_of(sid):
+    # 科教館網站 PDF 檔名（第 52 屆起）；沒有時用下載的官方 PDF 檔名（第 51 屆起）
     m = re.search(r'(?:nphssf|NPHSF)\d{4}-(\d{6})', filenames.get(sid) or '')
-    return m.group(1) if m else None
+    return m.group(1) if m else pdf_codes.get(sid)
 
 def norm_title(t):
     return re.sub(r'[\W_]', '', t).lower()

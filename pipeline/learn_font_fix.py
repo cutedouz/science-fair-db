@@ -1,18 +1,18 @@
-"""第 55 屆部分 PDF 的字型編碼錯誤（例：「溶解」抽成「愞解」、「，」抽成「炻」）。
+"""第 51～55 屆部分 PDF 的字型編碼錯誤（例：「溶解」抽成「愞解」、「，」抽成「炻」）。
 比對 PDF 內的摘要與科教館網站上的正確摘要，學出「錯字 → 正確字」對照表，存成 pipeline/font_fix.json。
 """
 import json, os, re, sys, collections, difflib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from extract_fulltext import ROOT, find_jobs, extract_text, GARBLED
+from extract_fulltext import ROOT, find_jobs, extract_text, is_garbled
 
 works = {w['id']: w for w in json.load(open(os.path.join(ROOT, 'data', 'works.json'), encoding='utf-8'))}
 pairs = collections.defaultdict(collections.Counter)
 used = 0
 for sid, path, ed in find_jobs():
-    if ed != 55:
+    if not 51 <= ed <= 55:
         continue
     text = re.sub(r'\s+', '', extract_text(path))
-    if len(GARBLED.findall(text)) < 5:
+    if not is_garbled(text):
         continue
     good = re.sub(r'\s+', '', works[sid]['abstract'])
     if len(good) < 80:
@@ -34,7 +34,7 @@ for sid, path, ed in find_jobs():
                 if x != y:
                     pairs[x][y] += 1
 # 正常文章裡常見的字不可能是錯字（例如「為」「會」）；只收在其他屆摘要中罕見的字
-normal = collections.Counter(ch for w in works.values() if w['edition_no'] != 55 for ch in w['abstract'])
+normal = collections.Counter(ch for w in works.values() if not 51 <= (w['edition_no'] or 0) <= 55 for ch in w['abstract'])
 table = {}
 for x, c in pairs.items():
     y, n = c.most_common(1)[0]
@@ -42,6 +42,12 @@ for x, c in pairs.items():
         continue
     if n >= 2 and n / sum(c.values()) >= 0.75:
         table[x] = y
-json.dump(table, open(os.path.join(ROOT, 'pipeline', 'font_fix.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=0, sort_keys=True)
+# extract_text 已套用現有對照表，這一輪學到的是剩下的錯字；和舊表合併（可重複執行，逐輪補齊）
+path = os.path.join(ROOT, 'pipeline', 'font_fix.json')
+old = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
+added = {k: v for k, v in table.items() if k not in old}
+table = {**old, **added}
+json.dump(table, open(path, 'w', encoding='utf-8'), ensure_ascii=False, indent=0, sort_keys=True)
+print('本輪新增', len(added), '個')
 print('用來學習的作品', used, '件；學到', len(table), '個字的對照')
 print(' '.join(f'{k}→{v}' for k, v in sorted(table.items(), key=lambda kv: -sum(pairs[kv[0]].values()))[:60]))

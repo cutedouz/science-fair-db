@@ -15,6 +15,8 @@
 原始資料、PDF 與 Excel 不放在這個 repo（見 `.gitignore`），需在本機執行：
 
 ```bash
+python3 pipeline/sort_new_pdfs.py <下載資料夾>    # 0. 新下載的 PDF 併入 PDF原始檔 與 筆記本分類
+python3 pipeline/pdf_codes.py                     #    從 PDF 檔名取官方作品編號與組別
 python3 scraper/scan.py 1 30000                 # 1. 抓科教館作品頁（輸出 data/raw/scan.jsonl）
 python3 scraper/heads.py                         # 2. 讀 PDF 檔名取得作品編號（data/raw/filenames.json）
 python3 pipeline/clean.py                        # 3. 整理成 data/works.json
