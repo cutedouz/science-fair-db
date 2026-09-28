@@ -22,6 +22,13 @@ def match_pdf(fname, works, by_code, by_title, overrides):
         return None, None, None, None
     ed, grp, code, title = int(m.group(1)), m.group(2), m.group(3), m.group(4)
     w = works.get(overrides.get(nfc(fname))) or by_code.get((ed, code)) or by_title.get((ed, nt(title)))
+    if not w and '待核對' not in title:
+        # 近似名稱：同一屆中相似度 ≥ 0.85，且明顯高於第二像的作品
+        import difflib
+        cands = sorted(((difflib.SequenceMatcher(None, nt(title), k[1]).ratio(), v) for k, v in by_title.items() if k[0] == ed),
+                       key=lambda x: -x[0])[:2]
+        if cands and cands[0][0] >= 0.85 and (len(cands) < 2 or cands[0][0] - cands[1][0] >= 0.1):
+            w = cands[0][1]
     return ed, grp, code, w
 
 
@@ -51,23 +58,35 @@ if __name__ == '__main__':
     src = os.path.join(ROOT, sys.argv[1])
     dry = '--dry-run' in sys.argv
     works, by_code, by_title, overrides = load_index()
-    plan, bad = [], []
+    plan, bad, dup = [], [], []
     for d, _, fs in os.walk(src):
         for f in fs:
             if f.startswith('._') or not f.lower().endswith('.pdf'):
                 continue
             ed, grp, code, w = match_pdf(f, works, by_code, by_title, overrides)
+            if ed and os.path.exists(os.path.join(RAW, f'第{ed}屆', f)):
+                dup.append(f); continue          # 已經分類過的檔案，略過
             if not w:
                 bad.append(f); continue
             stage = GROUP_STAGE.get(grp) or w['stage']
             plan.append((os.path.join(d, f), ed, f"{'、'.join(w['domains']) or '未分類'}_{stage}"))
+    if dup:
+        print('已分類過、略過', len(dup), '份')
     if bad:
-        print('對不上的檔案（請加進 pipeline/pdf_overrides.json 後重跑）：'); [print('  ', b) for b in bad]
-        sys.exit(1)
+        print(f'對不上的檔案 {len(bad)} 份（留在原資料夾；可加進 pipeline/pdf_overrides.json 後重跑）')
+        json.dump(sorted(bad), open(os.path.join(ROOT, 'data', 'pdf_unmatched.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=0)
+        if '--skip-unmatched' not in sys.argv:
+            sys.exit(1)
     groups = collections.defaultdict(list)
     for p in plan:
         groups[p[2]].append(p)
     existing = [d for d in os.listdir(DST) if not d.startswith('._') and os.path.isdir(os.path.join(DST, d))]
+    # 少於 5 份、又沒有現成資料夾的零星組別（多為跨領域的舊科別），併入「其他_學習階段」
+    for base in [b for b, items in groups.items() if len(items) < 5]:
+        if not any(d == base or d.startswith(base + '_第') for d in existing):
+            other = '其他_' + base.rsplit('_', 1)[1]
+            groups[other] = groups.get(other, []) + [(x[0], x[1], other) for x in groups.pop(base)]
+    plan = [x for items in groups.values() for x in items]
     target, renames = {}, []
     for base, items in groups.items():
         new_eds = sorted({x[1] for x in items})

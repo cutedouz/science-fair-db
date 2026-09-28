@@ -15,3 +15,6 @@ PDF原始檔/
 __pycache__/
 !pipeline/subjects.csv
 CLAUDE.md
+未分類PDF檔/
+*.pdf
+drive-download-*/
