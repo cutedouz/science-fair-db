@@ -18,9 +18,10 @@
 python3 scraper/scan.py 1 30000                 # 1. 抓科教館作品頁（輸出 data/raw/scan.jsonl）
 python3 scraper/heads.py                         # 2. 讀 PDF 檔名取得作品編號（data/raw/filenames.json）
 python3 pipeline/clean.py                        # 3. 整理成 data/works.json
-python3 pipeline/extract_fulltext.py             # 4. 從 PDF原始檔 抽研究內容節錄
+python3 pipeline/learn_font_fix.py                # 4. （第 55 屆字型編碼錯誤）比對網站摘要學出錯字對照表
+python3 pipeline/extract_fulltext.py             #    從 PDF原始檔 抽研究內容節錄（可加 --editions 54,55）
 python3 pipeline/finish_fulltext.py              #    補跑失敗的檔案並產生報告
-python3 pipeline/redact_fulltext.py              #    遮蔽節錄中的作者姓名（必做）
+python3 pipeline/redact_fulltext.py              #    產生網站版節錄：遮蔽作者姓名、移除金鑰（必做）
 python3 pipeline/build_site_data.py --similar    # 5. 產生網站資料（--similar 重算相似作品）
 python3 pipeline/build_xlsx.py                   # 6. 產生自用 Excel（含作者，勿公開）
 git add site && git commit -m "更新資料" && git push

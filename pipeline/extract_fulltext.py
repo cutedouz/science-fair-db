@@ -16,6 +16,10 @@ SRC = os.path.join(ROOT, 'PDF原始檔')
 OUT_FULL = os.path.join(ROOT, 'data', 'fulltext')
 OUT_SITE = os.path.join(ROOT, 'site', 'data', 'fulltext')
 MAX_CHARS = 12000
+# 第 55 屆部分 PDF 字型編碼錯誤時常見的錯字；出現 5 次以上就套用 font_fix.json 對照表
+GARBLED = re.compile('[ˣǵ烉炻ˤᶳᶲㆹ冯⃱屛]')
+_ff = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'font_fix.json')
+FONT_FIX = str.maketrans(json.load(open(_ff, encoding='utf-8'))) if os.path.exists(_ff) else {}
 
 NUM = '壹貳參参肆伍陸柒捌玖拾'
 # 三種章節編號寫法：壹貳參、一二三、沒有編號（整行就是章節名稱）
@@ -128,6 +132,8 @@ def work(job):
         text = extract_text(path)
     except Exception as err:
         return sid, None, f'讀取失敗：{err}'
+    if len(GARBLED.findall(text)) >= 5:
+        text = text.translate(FONT_FIX)
     if len(re.findall(r'[一-鿿]', text)) < 300:
         return sid, None, '幾乎沒有文字（可能是掃描檔）'
     secs = split_sections(text)
@@ -148,19 +154,34 @@ def trim(secs, limit):
     return out, True
 
 
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.join(ROOT, 'pipeline'))
+def find_jobs():
+    """PDF原始檔 裡每份 PDF 對應到的作品：先用「屆次＋作品編號」，資料庫缺編號時改用作品名稱。"""
     import unicodedata
     nfc = lambda s: unicodedata.normalize('NFC', s)
-    by_code = {}
+    nt = lambda t: re.sub(r'[\W_]', '', t)
+    works = json.load(open(os.path.join(ROOT, 'data', 'works.json'), encoding='utf-8'))
+    by_code = {(w['edition_no'], w['code']): w for w in works if w['code']}
+    by_title = {(w['edition_no'], nt(w['title'])): w for w in works if w['src'] == '全國' and w['type'] == '作品'}
+    jobs = {}
     for d, _, fs in os.walk(SRC):
         for f in fs:
-            m = re.match(r'第(\d+)屆_.*?_(\d{6})_', nfc(f))
-            if m and f.lower().endswith('.pdf') and not f.startswith('._'):
-                by_code[(int(m.group(1)), m.group(2))] = os.path.join(d, f)
-    works = json.load(open(os.path.join(ROOT, 'data', 'works.json'), encoding='utf-8'))
-    jobs = [(w['id'], by_code[(w['edition_no'], w['code'])]) for w in works
-            if w['code'] and (w['edition_no'], w['code']) in by_code]
+            m = re.match(r'第(\d+)屆_.*?_(\d{6})_(.+)\.pdf$', nfc(f))
+            if not m or f.startswith('._'):
+                continue
+            ed = int(m.group(1))
+            w = by_code.get((ed, m.group(2))) or by_title.get((ed, nt(m.group(3))))
+            if w:
+                jobs[w['id']] = (w['id'], os.path.join(d, f), ed)
+    return sorted(jobs.values())
+
+
+if __name__ == '__main__':
+    jobs = find_jobs()
+    if '--editions' in sys.argv:
+        eds = {int(x) for x in sys.argv[sys.argv.index('--editions') + 1].split(',')}
+        jobs = [j for j in jobs if j[2] in eds]
+    jobs = [(sid, path) for sid, path, _ in jobs]
+    print('處理', len(jobs), '份', flush=True)
     if '--limit' in sys.argv:
         jobs = jobs[:int(sys.argv[sys.argv.index('--limit') + 1])]
     os.makedirs(OUT_FULL, exist_ok=True)

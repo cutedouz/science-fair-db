@@ -1,16 +1,9 @@
 """補跑沒有結果的 PDF（每份獨立程序、限時），並重建 data/fulltext_report.csv。"""
-import csv, json, os, re, subprocess, sys, collections, unicodedata
+import csv, json, os, subprocess, sys, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extract_fulltext import ROOT, OUT_FULL, OUT_SITE, MAX_CHARS, trim
-nfc = lambda s: unicodedata.normalize('NFC', s)
-by = {}
-for d, _, fs in os.walk(os.path.join(ROOT, 'PDF原始檔')):
-    for f in fs:
-        m = re.match(r'第(\d+)屆_.*?_(\d{6})_', nfc(f))
-        if m and f.lower().endswith('.pdf') and not f.startswith('._'):
-            by[(int(m.group(1)), m.group(2))] = os.path.join(d, f)
-works = json.load(open(os.path.join(ROOT, 'data', 'works.json'), encoding='utf-8'))
-jobs = [(w['id'], by[(w['edition_no'], w['code'])]) for w in works if w['code'] and (w['edition_no'], w['code']) in by]
+from extract_fulltext import find_jobs
+jobs = [(sid, path) for sid, path, _ in find_jobs()]
 status_path = os.path.join(ROOT, 'data', 'fulltext_status.json')
 status = json.load(open(status_path)) if os.path.exists(status_path) else {}
 for sid, path in jobs:

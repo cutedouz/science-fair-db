@@ -14,3 +14,4 @@ PDF原始檔/
 *.log
 __pycache__/
 !pipeline/subjects.csv
+CLAUDE.md
