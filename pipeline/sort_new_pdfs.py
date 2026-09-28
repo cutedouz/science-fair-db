@@ -17,7 +17,7 @@ nt = lambda t: re.sub(r'[\W_]', '', t)
 
 def match_pdf(fname, works, by_code, by_title, overrides):
     """回傳 (屆次, 組別, 作品編號, 作品) ；對不上時作品為 None"""
-    m = re.match(r'第(\d+)屆_([^_]+)_.*?_(\d{6})_(.+)\.pdf$', nfc(fname))
+    m = re.match(r'第(\d+)屆_([^_]+)_.*?_(\d{4,6})_(.+)\.pdf$', nfc(fname))
     if not m:
         return None, None, None, None
     ed, grp, code, title = int(m.group(1)), m.group(2), m.group(3), m.group(4)

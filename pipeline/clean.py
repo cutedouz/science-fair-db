@@ -113,9 +113,12 @@ def city_of(school):
     return min(hits)[1] if hits else None
 
 GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高級中等學校組': '高中職'}
+PDF_GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高中組': '高中', '高職組': '高職'}
 CODE_STAGE = {'03': '國中', '04': '高中', '05': '高中職', '08': '國小', '09': '高職'}
 pc_path = os.path.join(RAW, 'pdf_codes.json')
-pdf_codes = {int(k): v['code'] for k, v in json.load(open(pc_path, encoding='utf-8')).items()} if os.path.exists(pc_path) else {}
+_pc = json.load(open(pc_path, encoding='utf-8')) if os.path.exists(pc_path) else {}
+pdf_codes = {int(k): v['code'] for k, v in _pc.items() if len(v['code']) == 6}      # 第 40～41 屆是四位數編號，看不出組別
+pdf_groups = {int(k): v['group'] for k, v in _pc.items()}
 def code_of(sid):
     # 科教館網站 PDF 檔名（第 52 屆起）；沒有時用下載的官方 PDF 檔名（第 51 屆起）
     m = re.search(r'(?:nphssf|NPHSF)\d{4}-(\d{6})', filenames.get(sid) or '')
@@ -175,6 +178,8 @@ for w in works:
         w['stage'], w['stage_src'] = CODE_STAGE[code[:2]], '作品編號'
     elif w['id'] in groups:
         w['stage'], w['stage_src'] = GROUP_STAGE[groups[w['id']]], '官網組別'
+    elif PDF_GROUP_STAGE.get(pdf_groups.get(w['id'])):
+        w['stage'], w['stage_src'] = PDF_GROUP_STAGE[pdf_groups[w['id']]], '官網組別'
     elif m:
         w['stage'], w['stage_src'] = m.group(1), '官網科別'
     else:

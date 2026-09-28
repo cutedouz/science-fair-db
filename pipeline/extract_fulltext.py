@@ -229,7 +229,7 @@ def find_jobs():
     jobs = {}
     for d, _, fs in os.walk(SRC):
         for f in fs:
-            m = re.match(r'第(\d+)屆_.*?_(\d{6})_(.+)\.pdf$', nfc(f))
+            m = re.match(r'第(\d+)屆_.*?_(\d{4,6})_(.+)\.pdf$', nfc(f))
             if not m or f.startswith('._'):
                 continue
             ed = int(m.group(1))
