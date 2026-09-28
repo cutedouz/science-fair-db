@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>科展資料庫</title>
+<meta name="description" content="搜尋全國中小學科展與臺灣國際科展歷屆作品，找出相似研究，匯出研究包給 AI 筆記本分析。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <a class="brand" href="./"><b>科展資料庫</b><small id="brand-count">全國科展・國際科展</small></a>
+    <label class="search" for="q">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="輸入研究主題，例如：蚵殼 吸附、蜘蛛 結網" autocomplete="off" enterkeyhint="search">
+      <button class="clear" id="q-clear" type="button" aria-label="清除搜尋" hidden>✕</button>
+    </label>
+    <div class="top-actions">
+      <button class="btn only-narrow" id="open-filters" type="button">篩選 <span class="count" id="filter-count" hidden>0</span></button>
+      <button class="btn" id="open-verify" type="button">查證方向</button>
+      <button class="btn primary" id="open-pack" type="button">研究包 <span class="count" id="pack-count">0</span></button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="filters" id="filters" aria-label="篩選條件">
+    <div class="filters-close"><strong>篩選條件</strong><button class="btn" id="close-filters" type="button">看結果</button></div>
+    <div class="fgroup"><h3>來源</h3><div class="chips" id="f-src"></div></div>
+    <div class="fgroup"><h3>學習階段</h3><div class="chips" id="f-stage"></div></div>
+    <div class="fgroup"><h3>領域</h3><div class="chips" id="f-domain"></div></div>
+    <div class="fgroup"><h3>得獎</h3><div class="chips" id="f-award"></div></div>
+    <div class="fgroup"><h3>年份</h3>
+      <div class="range"><select id="y-from" aria-label="起始年份"></select><span>—</span><select id="y-to" aria-label="結束年份"></select></div>
+    </div>
+    <div class="fgroup"><h3>縣市</h3><select class="fselect" id="f-city" aria-label="縣市"><option value="">全部縣市</option></select></div>
+    <label class="check" for="f-review"><input type="checkbox" id="f-review"> 只看評審評語</label>
+    <button class="reset" id="reset" type="button">清除所有篩選</button>
+  </aside>
+
+  <section aria-live="polite">
+    <div class="results-head">
+      <div class="total"><b id="total">—</b> 件作品 <span class="loading-note" id="abs-note">摘要載入中，完成後會一併搜尋摘要</span></div>
+      <label class="check scope" for="f-scope"><input type="checkbox" id="f-scope"> 只搜尋標題與關鍵字</label>
+      <select id="sort" aria-label="排序">
+        <option value="rel">依相關度</option>
+        <option value="new">最新在前</option>
+        <option value="old">最早在前</option>
+      </select>
+    </div>
+    <ol class="list" id="list"></ol>
+    <button class="btn more" id="more" type="button" hidden>顯示更多</button>
+  </section>
+</main>
+
+<footer class="foot">
+  <div>
+    <h4>資料來源</h4>
+    <p>作品資料來自<a href="https://www.ntsec.edu.tw/science/list.aspx" target="_blank" rel="noopener">國立臺灣科學教育館</a>，依其<a href="https://www.ntsec.edu.tw/article/detail.aspx?a=13931" target="_blank" rel="noopener">政府網站資料開放宣告</a>使用。本站並非科教館官方網站，也不代表科教館認可。</p>
+  </div>
+  <div>
+    <h4>本站整理的欄位</h4>
+    <p>「領域」由原始科別歸類而成；「學習階段」第 52 屆以後取自官方作品編號，更早的屆次由學校名稱推測（以官方資料驗證的準確率約 99%），標示「推測」。原始科別一律保留顯示。</p>
+  </div>
+  <div>
+    <h4>已知缺漏</h4>
+    <p>科教館網站未公開 2016 年國際科展作品；少數作品原本即無摘要或 PDF。本站不收錄作者姓名，請至各作品的科教館原始頁面查看。<span id="built"></span></p>
+  </div>
+</footer>
+
+<div class="scrim" id="scrim" hidden></div>
+<article class="drawer" id="drawer" hidden aria-modal="true" role="dialog" aria-labelledby="d-title"></article>
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

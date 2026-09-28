@@ -1,0 +1,16 @@
+# macOS / exFAT 產生的隱藏檔
+._*
+.DS_Store
+.claude/
+
+# 不公開：原始資料（含作者姓名）、PDF、Excel、官方資料表
+/data/
+PDF原始檔/
+筆記本分類/
+官方作品資料表/
+*.zip
+*.xlsx
+*.csv
+*.log
+__pycache__/
+!pipeline/subjects.csv
