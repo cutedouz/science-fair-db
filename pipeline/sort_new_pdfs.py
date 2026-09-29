@@ -10,17 +10,22 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, 'PDF原始檔', '科展資料庫', 'PDF')
 DST = os.path.join(ROOT, '筆記本分類')
 LIMIT = 300
-GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高中組': '高中職', '高職組': '高中職', '高級中等學校組': '高中職'}
+GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高中組': '高中職', '高職組': '高中職', '高級中等學校組': '高中職',
+               '初小組': '國小', '高小組': '國小', '國小教師組': '國小', '國中教師組': '國中', '高中教師組': '高中職'}
 nfc = lambda s: unicodedata.normalize('NFC', s)
 nt = lambda t: re.sub(r'[\W_]', '', t)
 
 
 def match_pdf(fname, works, by_code, by_title, overrides):
     """回傳 (屆次, 組別, 作品編號, 作品) ；對不上時作品為 None"""
-    m = re.match(r'第(\d+)屆_([^_]+)_.*?_(\d{4,6})_(.+)\.pdf$', nfc(fname))
+    m = re.match(r'第(\d+)屆_([^_]+)_.*?_(\d{2,6})_(.+)\.pdf$', nfc(fname))
     if not m:
         return None, None, None, None
     ed, grp, code, title = int(m.group(1)), m.group(2), m.group(3), m.group(4)
+    # 早期檔名：「第15屆_國小教師組_15_088_作品名稱（國小教師組）」，編號分兩段、名稱後附組別
+    while re.match(r'\d{2,4}_', title):
+        code, title = title.split('_', 1)[0], title.split('_', 1)[1]
+    title = re.sub(r'[（(][^）)]*組[）)]$', '', title)
     w = works.get(overrides.get(nfc(fname))) or by_code.get((ed, code)) or by_title.get((ed, nt(title)))
     if not w and '待核對' not in title:
         # 近似名稱：同一屆中相似度 ≥ 0.85，且明顯高於第二像的作品
@@ -69,7 +74,8 @@ if __name__ == '__main__':
             if not w:
                 bad.append(f); continue
             stage = GROUP_STAGE.get(grp) or w['stage']
-            plan.append((os.path.join(d, f), ed, f"{'、'.join(w['domains']) or '未分類'}_{stage}"))
+            domain = '、'.join(w['domains']).replace('其它', '其他') or '其他'
+            plan.append((os.path.join(d, f), ed, f"{domain}_{stage}"))
     if dup:
         print('已分類過、略過', len(dup), '份')
     if bad:
@@ -112,10 +118,28 @@ if __name__ == '__main__':
                 target[base] = f'{base}_第{lo}-{hi}屆'
         else:
             target[base] = base
+    item_target = {}
+    for base, items in groups.items():
+        t = target[base]
+        if t not in existing and len(items) > LIMIT:
+            chunks, cur = [], []
+            for ed in sorted({x[1] for x in items}):
+                batch = [x for x in items if x[1] == ed]
+                if cur and len(cur) + len(batch) > LIMIT:
+                    chunks.append(cur); cur = []
+                cur += batch
+            chunks.append(cur)
+            for c in chunks:
+                lo, hi = min(x[1] for x in c), max(x[1] for x in c)
+                for x in c:
+                    item_target[x[0]] = f'{base}_第{lo}-{hi}屆'
+        else:
+            for x in items:
+                item_target[x[0]] = t
     for a, b in renames:
         print('改名', a, '→', b)
-    for base, items in sorted(groups.items()):
-        print(f'{target[base]:32s} +{len(items)}')
+    for t, n in sorted(collections.Counter(item_target.values()).items()):
+        print(f'{t:32s} +{n}')
     if dry:
         sys.exit(0)
     for a, b in renames:
@@ -124,7 +148,7 @@ if __name__ == '__main__':
         os.makedirs(os.path.join(RAW, f'第{ed}屆'), exist_ok=True)
         raw_path = os.path.join(RAW, f'第{ed}屆', os.path.basename(path))
         shutil.move(path, raw_path)
-        os.makedirs(os.path.join(DST, target[base]), exist_ok=True)
-        shutil.copyfile(raw_path, os.path.join(DST, target[base], os.path.basename(path)))
+        os.makedirs(os.path.join(DST, item_target[path]), exist_ok=True)
+        shutil.copyfile(raw_path, os.path.join(DST, item_target[path], os.path.basename(path)))
     over = {d: count(os.path.join(DST, d)) for d in os.listdir(DST) if not d.startswith('._')}
     print('FINISHED', len(plan), '份；資料夾', len(over), '個；最大', max(over.values()))

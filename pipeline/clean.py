@@ -113,7 +113,8 @@ def city_of(school):
     return min(hits)[1] if hits else None
 
 GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高級中等學校組': '高中職'}
-PDF_GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高中組': '高中', '高職組': '高職'}
+PDF_GROUP_STAGE = {'國小組': '國小', '國中組': '國中', '高中組': '高中', '高職組': '高職', '初小組': '國小', '高小組': '國小',
+                   '國小教師組': '國小', '國中教師組': '國中', '高中教師組': '高中'}
 CODE_STAGE = {'03': '國中', '04': '高中', '05': '高中職', '08': '國小', '09': '高職'}
 pc_path = os.path.join(RAW, 'pdf_codes.json')
 _pc = json.load(open(pc_path, encoding='utf-8')) if os.path.exists(pc_path) else {}

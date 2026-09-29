@@ -10,6 +10,7 @@
 """
 import csv, json, math, os, re, sys, collections
 from multiprocessing import Pool
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'PDF原始檔')
@@ -216,24 +217,15 @@ def trim(secs, limit):
 
 
 def find_jobs():
-    """PDF原始檔 裡每份 PDF 對應到的作品：先用「屆次＋作品編號」，資料庫缺編號時改用作品名稱。"""
-    import unicodedata
-    nfc = lambda s: unicodedata.normalize('NFC', s)
-    nt = lambda t: re.sub(r'[\W_]', '', t)
-    works = json.load(open(os.path.join(ROOT, 'data', 'works.json'), encoding='utf-8'))
-    by_code = {(w['edition_no'], w['code']): w for w in works if w['code']}
-    by_title = {(w['edition_no'], nt(w['title'])): w for w in works if w['src'] == '全國' and w['type'] == '作品'}
-    ov = json.load(open(os.path.join(ROOT, 'pipeline', 'pdf_overrides.json'), encoding='utf-8'))
-    overrides = {nfc(k): v for k, v in ov.items() if not k.startswith('_')}
-    by_id = {w['id']: w for w in works}
+    """PDF原始檔 裡每份 PDF 對應到的作品（規則同 sort_new_pdfs.match_pdf）"""
+    from sort_new_pdfs import load_index, match_pdf
+    works, by_code, by_title, overrides = load_index()
     jobs = {}
     for d, _, fs in os.walk(SRC):
         for f in fs:
-            m = re.match(r'第(\d+)屆_.*?_(\d{4,6})_(.+)\.pdf$', nfc(f))
-            if not m or f.startswith('._'):
+            if f.startswith('._') or not f.lower().endswith('.pdf'):
                 continue
-            ed = int(m.group(1))
-            w = by_id.get(overrides.get(nfc(f))) or by_code.get((ed, m.group(2))) or by_title.get((ed, nt(m.group(3))))
+            ed, grp, code, w = match_pdf(f, works, by_code, by_title, overrides)
             if w:
                 jobs[w['id']] = (w['id'], os.path.join(d, f), ed)
     return sorted(jobs.values())
@@ -242,7 +234,7 @@ def find_jobs():
 if __name__ == '__main__':
     jobs = find_jobs()
     if '--editions' in sys.argv:
-        eds = {int(x) for x in sys.argv[sys.argv.index('--editions') + 1].split(',')}
+        eds = {int(x) for x in sys.argv[sys.argv.index('--editions') + 1].split(',') if x.strip()}
         jobs = [j for j in jobs if j[2] in eds]
     jobs = [(sid, path) for sid, path, _ in jobs]
     print('處理', len(jobs), '份', flush=True)
