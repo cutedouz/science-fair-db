@@ -25,6 +25,8 @@ python3 pipeline/extract_fulltext.py             #    從 PDF原始檔 抽研究
 python3 pipeline/finish_fulltext.py              #    補跑失敗的檔案並產生報告
 python3 pipeline/redact_fulltext.py              #    產生網站版節錄：遮蔽作者姓名、移除金鑰（必做）
 python3 pipeline/build_site_data.py --similar    # 5. 產生網站資料（--similar 重算相似作品）
-python3 pipeline/build_xlsx.py                   # 6. 產生自用 Excel（含作者，勿公開）
+python3 scraper/verify_online.py                  # 6. 逐筆核對官網（找出更新、下架與新作品）
+python3 scraper/fetch_intl_pdfs.py               #    下載國際科展 PDF 並分年、分科
+python3 pipeline/build_xlsx.py                   # 7. 產生自用 Excel 與總表（含作者，勿公開）
 git add site && git commit -m "更新資料" && git push
 ```

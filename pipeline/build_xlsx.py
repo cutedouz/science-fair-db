@@ -14,6 +14,23 @@ for line in open(os.path.join(ROOT, 'data', 'raw', 'scan.jsonl'), encoding='utf-
     if r.get('作者'):
         authors[r['sid']] = '、'.join(x.strip() for x in r['作者'].replace('；', ';').split(';') if x.strip())
 
+# 本機 PDF：分年檔名、分科資料夾（全國用 pdf_codes.json 對應，國際檔名含 sid）
+import re, unicodedata
+nfc = lambda x: unicodedata.normalize('NFC', x)
+folder_of = {}
+for d, _, fs in os.walk(os.path.join(ROOT, '筆記本分類')):
+    for f in fs:
+        if f.lower().endswith('.pdf') and not f.startswith('._'):
+            folder_of[nfc(f)] = os.path.basename(d)
+pdf_file = {int(k): nfc(v['file']) for k, v in json.load(open(os.path.join(ROOT, 'data', 'raw', 'pdf_codes.json'), encoding='utf-8')).items()}
+for d, _, fs in os.walk(os.path.join(ROOT, 'PDF原始檔', '國際科展')):
+    for f in fs:
+        m = re.match(r'國際_\d{4}_.*?_(\d+)_', nfc(f))
+        if m and not f.startswith('._'):
+            pdf_file[int(m.group(1))] = nfc(f)
+verify_path = os.path.join(ROOT, 'data', 'verify_report.json')
+VERIFIED = json.load(open(verify_path, encoding='utf-8'))['核對日期'] if os.path.exists(verify_path) else ''
+
 STAGE_SRC = {'作品編號': '官方（作品編號）', '官網組別': '官方（組別列表）', '官網科別': '官方（科別欄）', '推測': '推測（依學校名稱）'}
 # (欄名, 取值, 欄寬, 是否為本站整理欄位)
 COLS = [
@@ -39,6 +56,9 @@ COLS = [
     ('類型', lambda w: w['type'], 6, 1),
     ('同作品另一科展 sid', lambda w: '、'.join(map(str, w.get('related', []))), 12, 1),
     ('研究內容節錄', lambda w: '有' if os.path.exists(os.path.join(ROOT, 'site', 'data', 'fulltext', f"{w['id']}.json")) else '', 8, 1),
+    ('本機PDF', lambda w: '有' if w['id'] in pdf_file else '', 7, 1),
+    ('分科資料夾', lambda w: folder_of.get(pdf_file.get(w['id'], ''), ''), 24, 1),
+    ('官網核對日期', lambda w: VERIFIED, 11, 1),
     ('摘要或動機', lambda w: w['abstract'], 40, 0),
     ('檔案連結', lambda w: w['pdf'] or '', 30, 0),
     ('科教館頁面', lambda w: w['url'], 30, 1),
@@ -51,7 +71,7 @@ def build(src, name):
         if w['src'] != src:
             continue
         ws.append([ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v for v in (c[1](w) for c in COLS)])
-        for col, key in ((24, 'pdf'), (25, 'url')):
+        for col, key in ((27, 'pdf'), (28, 'url')):
             if w[key]:
                 cell = ws.cell(ws.max_row, col); cell.hyperlink = w[key]; cell.font = Font(color='0563C1', underline='single')
     orig, added = PatternFill('solid', fgColor='D9E1F2'), PatternFill('solid', fgColor='E2EFDA')
@@ -84,3 +104,42 @@ def build(src, name):
 
 build('全國', '全國中小學科展作品_歷屆')
 build('國際', '臺灣國際科展作品_歷屆')
+
+
+def build_total():
+    from openpyxl import load_workbook
+    wb = Workbook(); wb.remove(wb.active)
+    for src, name in (('全國', '全國中小學科展'), ('國際', '臺灣國際科展')):
+        ws = wb.create_sheet(name)
+        ws.append([c[0] for c in COLS])
+        for w in works:
+            if w['src'] == src:
+                ws.append([ILLEGAL_CHARACTERS_RE.sub('', v) if isinstance(v, str) else v for v in (c[1](w) for c in COLS)])
+        for c, (_, _, width, is_added) in zip(ws[1], COLS):
+            c.font = Font(bold=True); c.fill = PatternFill('solid', fgColor='E2EFDA' if is_added else 'D9E1F2')
+            ws.column_dimensions[c.column_letter].width = width
+        ws.freeze_panes = 'C2'; ws.auto_filter.ref = ws.dimensions
+    st = wb.create_sheet('統計', 0)
+    st.append(['來源', '屆次／年份', '作品數', '有本機PDF', '有研究內容節錄', '評語'])
+    import collections
+    agg = collections.OrderedDict()
+    for w in sorted(works, key=lambda w: (w['src'] != '全國', w['year'] or 0)):
+        k = (w['src'], w['edition'])
+        a = agg.setdefault(k, [0, 0, 0, 0])
+        if w['type'] == '評語':
+            a[3] += 1; continue
+        a[0] += 1
+        a[1] += w['id'] in pdf_file
+        a[2] += os.path.exists(os.path.join(ROOT, 'site', 'data', 'fulltext', f"{w['id']}.json"))
+    for (src, ed), (n, p, f, r) in agg.items():
+        st.append([src, ed, n, p, f, r])
+    tot = [sum(v[i] for v in agg.values()) for i in range(4)]
+    st.append(['合計', '', *tot])
+    for c in st[1]: c.font = Font(bold=True); c.fill = PatternFill('solid', fgColor='D9E1F2')
+    for col, wd in zip('ABCDEF', (8, 18, 9, 11, 14, 7)): st.column_dimensions[col].width = wd
+    st.freeze_panes = 'A2'
+    st.append([]); st.append([f'資料來源：國立臺灣科學教育館（{VERIFIED} 逐筆核對官網）。含作者姓名，僅供自用，請勿公開。'])
+    path = os.path.join(ROOT, '科展作品總表.xlsx'); wb.save(path); print(path)
+
+
+build_total()
